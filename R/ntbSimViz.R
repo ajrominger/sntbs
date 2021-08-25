@@ -10,7 +10,10 @@
 #' @param SADm function defining the metacommunity SAD as a \code{pika::sad}
 #' class object
 #' @param nstep number of time steps to simulate
-#' @param init initial state (optional, defults to NULL)
+#' @param init initial state (optional, defaults to NULL)
+#' @param pal function of one argument (number of colors) used to generate a
+#' palette (optional, defaults to NULL)
+#' @param interval the interval between animation frames
 #'
 #' @examples
 #' x <- 'foo'
@@ -21,7 +24,20 @@
 #' @export
 
 
-ntbSimViz <- function(fname, J, m, nu, Sm, SADm, nstep, init = NULL) {
+ntbSimViz <- function(fname, J, m, nu, Sm, SADm, nstep,
+                      init = NULL, pal = NULL, interval = 0.1) {
+    # bound on number of new species likely to be added
+    n0 <- qbinom(0.95, nstep, nu)
+    i <- min(which(1 - pbinom(n0:nstep, nstep, nu) <= .Machine$double.eps^0.5))
+    newSpp <- min(i) - 1 + n0
+
+
+    # colors and symbols for plotting species
+    spcols <- pal(Sm + newSpp)
+    sppchs <- rep(15:18, each = ceiling((Sm + newSpp) / 4))
+    set.seed(2)
+    sppchs <- sample(sppchs[1:(Sm + newSpp)])
+
     # metacommunity sad
     JJm <- pika::sad2Rank(SADm, Sm)
     JJm <- JJm / sum(JJm)
@@ -29,36 +45,40 @@ ntbSimViz <- function(fname, J, m, nu, Sm, SADm, nstep, init = NULL) {
     # index of current number of local species
     JiMax <- Sm
 
+    # visual representation of individuals
+    xy <- expand.grid(1:sqrt(J), 1:sqrt(J))
+
     # vector to hold local SAD
     if(is.null(init)) {
         # initialize with random draw from metacommunity
-        JJ <- rep(0, Sm * 100)
+        JJ <- rep(0, Sm + newSpp)
         JJ[1:JiMax] <- rmultinom(1, J, JJm)
     } else {
         # otherwise use `init` and check that it's long enough
         JJ <- init
 
-        if(length(JJ) < Sm) {
-            JJ <- c(JJ, rep(0, Sm - length(JJ)))
+        if(length(JJ) < Sm + newSpp) {
+            JJ <- c(JJ, rep(0, Sm + newSpp - length(JJ)))
         }
     }
 
     # run the simulation and save the animation
     animation::saveVideo(video.name = fname,
-              ani.width = 800, ani.height = 800, interval = 0.1, nmax = nstep,
+              ani.width = 1800, ani.height = 1000,
+              interval = interval, nmax = nstep,
               expr = {
-    # pdf(file = fname, width = 5, height = 5)
+    # pdf(file = 'foo.pdf', width = 5, height = 5)
                   for(i in 1:nstep) {
                       # death
                       dead <- sample(JiMax, 1, prob = JJ[1:JiMax])
                       JJ[dead] <- JJ[dead] - 1
 
 
-                      if(runif(1) <= nu) {
+                      if(runif(1) < nu) {
                           # speciation
                           JJ[JiMax + 1] <- 1
                           JiMax <- JiMax + 1
-                      } else if(runif(1) <= m) {
+                      } else if(runif(1) < m) {
                           # immigration
                           imm <- sample(Sm, 1, prob = JJm)
                           JJ[imm] <- JJ[imm] + 1
@@ -68,62 +88,33 @@ ntbSimViz <- function(fname, J, m, nu, Sm, SADm, nstep, init = NULL) {
                           JJ[birth] <- JJ[birth] + 1
                       }
 
-                      foo <- JJ[JJ > 0]
-                      if(length(foo) > 0) {
-                          plot(sort(foo, TRUE),
-                               ylim = c(0, J), xlim = c(1, Sm * 1))
-                      }
-                  }
+                      # plotting
+                      above0 <- JJ > 0
+                      plotOrd <- order(JJ[above0], decreasing = TRUE)
+                      xyi <- rep(1:length(JJ), JJ)
 
-    # dev.off()
+                      layout(matrix(1:2, nrow = 1), widths = c(2, 1))
+
+                      par(cex = 2, mar = rep(1.5, 4))
+                      plot(xy, col = spcols[xyi], pch = sppchs[xyi], cex = 3,
+                           axes = FALSE, asp = 1,
+                           xlim = c(0, sqrt(J) + 1),
+                           ylim = c(0, sqrt(J) + 1))
+                      abline(h = (0:sqrt(J)) + 0.5, v = (0:sqrt(J)) + 0.5,
+                           col = 'black', lty = 1, lwd = 2)
+
+                      par(cex = 2, mar = c(8, 3, 8, 1) + 0.5, mgp = c(2, 1, 0))
+                      plot(JJ[above0][plotOrd], cex = 2,
+                           pch = sppchs[above0][plotOrd],
+                           col = spcols[above0][plotOrd],
+                           xlim = c(1, JiMax), ylim = c(0, max(J / 4, JJ)),
+                           xlab = 'Species sorted by abundance',
+                           ylab = 'Abundance')
+                  }
     })
 
+    try(dev.off(), silent = TRUE)
+
+    invisible(JJ)
 }
 
-
-# test
-# ntbSimViz(fname = 'foo.mp4', J = 36, m = 0.5, nu = 0.1, Sm = 20,
-#           SADm = pika::sad(model = 'stick', par = 0.99),
-#           nstep = 100, init = NULL)
-
-
-# J <- 10^2
-# m <- 0.4
-# nu <- 0.1
-# B <- 1000
-#
-# xy <- expand.grid(1:sqrt(J), 1:sqrt(J))
-# sp <- rep(0, J)
-# Smeta <- 20
-# meta <- rfish(Smeta, 0.01)
-# spcols <- c('gray', viridis(Smeta), magma(15)[-c(1:6, 15)])
-# Sspe <- length(spcols) - Smeta - 1
-#
-#
-# saveVideo(video.name = '2019-05-17_highSchoolEcol/fig_neutral.mp4',
-#           ani.width = 800, ani.height = 800, interval = 0.1, nmax = B,
-#           expr = {
-#               for(i in 1:B) {
-#                   # png(paste0('2019-05-17_highSchoolEcol/temp/frame_',
-#                   #            indexExpand(i, 1, B, 1), '.png'),
-#                   #     width = 5, height = 5, units = 'in', res = 140)
-#                   par(mar = rep(0.5, 4), cex = 2)
-#                   plot(xy, axes = FALSE, col = spcols[sp + 1], pch = 16, cex = 4)
-#                   box()
-#                   # dev.off()
-#
-#                   dead <- sample(length(sp), 1)
-#                   yesImm <- runif(1) <= m
-#                   yesSpe <- runif(1) <= nu
-#                   if(yesSpe) {
-#                       sp[dead] <- sample(Smeta + (1:Sspe), 1)
-#                   } else if(yesImm) {
-#                       sp[dead] <- sample(2:(Smeta + 1), 1, prob = meta)
-#                   } else {
-#                       sp[dead] <- sample(sp[-dead], 1)
-#                   }
-#               }
-#
-#           })
-#
-#
