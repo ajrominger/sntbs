@@ -67,7 +67,10 @@ ntbSimViz <- function(fname, J, m, nu, Sm, SADm, nstep,
               ani.width = 1800, ani.height = 1000,
               interval = interval, nmax = nstep,
               expr = {
-    # pdf(file = 'foo.pdf', width = 5, height = 5)
+                  # plotting limits for rank SAD
+                  xmax <- sum(JJ > 0)
+                  ymax <- max(JJ)
+
                   for(i in 1:nstep) {
                       # death
                       dead <- sample(JiMax, 1, prob = JJ[1:JiMax])
@@ -103,11 +106,28 @@ ntbSimViz <- function(fname, J, m, nu, Sm, SADm, nstep,
                       abline(h = (0:sqrt(J)) + 0.5, v = (0:sqrt(J)) + 0.5,
                            col = 'black', lty = 1, lwd = 2)
 
-                      par(cex = 2, mar = c(8, 3, 8, 1) + 0.5, mgp = c(2, 1, 0))
-                      plot(JJ[above0][plotOrd], cex = 2,
+                      # update plotting limits
+                      xnew <- sum(above0)
+                      if(xnew > xmax) {
+                          xmax <- xnew
+                      } else {
+                          xmax <- 0.1 * xnew + 0.9 * xmax
+                      }
+
+                      ynew <- max(JJ)
+                      if(ynew > ymax) {
+                          ymax <- ynew
+                      } else {
+                          ymax <- 0.1 * ynew + 0.9 * ymax
+                      }
+
+                      par(cex = 2, mar = c(8, 3, 8, 1) + 0.5,
+                          mgp = c(1.75, 0.5, 0), tcl = -0.25)
+                      plot(JJ[above0][plotOrd], cex = 1.5,
                            pch = sppchs[above0][plotOrd],
                            col = spcols[above0][plotOrd],
-                           xlim = c(1, JiMax), ylim = c(0, max(J / 4, JJ)),
+                           xlim = c(1, xmax), ylim = c(0, ymax),
+                           xaxt = 'n',
                            xlab = 'Species sorted by abundance',
                            ylab = 'Abundance')
                   }
